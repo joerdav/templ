@@ -247,6 +247,101 @@ background-color: { constants.BackgroundColor };
 				},
 			},
 		},
+		{
+			name: "css: single expression with media query",
+			input: `css Name() {
+@media (max-width: 600px) {
+background-color: #ffffff;
+}
+}`,
+			expected: CSSTemplate{
+				Name: Expression{
+					Value: "Name",
+					Range: Range{
+						From: Position{
+							Index: 4,
+							Line:  0,
+							Col:   4,
+						},
+						To: Position{
+							Index: 8,
+							Line:  0,
+							Col:   8,
+						},
+					},
+				},
+				Properties: []CSSProperty{},
+				MediaQueryRules: []MediaQueryRule{
+					{
+						QueryExpression: "(max-width: 600px)",
+						Properties: []CSSProperty{
+							ConstantCSSProperty{
+								Name:  "background-color",
+								Value: "#ffffff",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "css: media query with multiple properties",
+			input: `css Name() {
+@media (max-width: 600px) {
+background-color: #ffffff;
+font: { constants.Font };
+}
+}`,
+			expected: CSSTemplate{
+				Name: Expression{
+					Value: "Name",
+					Range: Range{
+						From: Position{
+							Index: 4,
+							Line:  0,
+							Col:   4,
+						},
+						To: Position{
+							Index: 8,
+							Line:  0,
+							Col:   8,
+						},
+					},
+				},
+				Properties: []CSSProperty{},
+				MediaQueryRules: []MediaQueryRule{
+					{
+						QueryExpression: "(max-width: 600px)",
+						Properties: []CSSProperty{
+							ConstantCSSProperty{
+								Name:  "background-color",
+								Value: "#ffffff",
+							},
+							ExpressionCSSProperty{
+								Name: "font",
+								Value: StringExpression{
+									Expression: Expression{
+										Value: "constants.Font",
+										Range: Range{
+											From: Position{
+												Index: 76,
+												Line:  3,
+												Col:   8,
+											},
+											To: Position{
+												Index: 90,
+												Line:  3,
+												Col:   22,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		tt := tt

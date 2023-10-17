@@ -115,7 +115,7 @@ func (tf TemplateFile) Write(w io.Writer) error {
 		if err = tf.Nodes[i].Write(w, indent); err != nil {
 			return err
 		}
-		if i == count - 1 {
+		if i == count-1 {
 			_, err = w.Write([]byte("\n"))
 		} else {
 			_, err = w.Write([]byte("\n\n"))
@@ -199,8 +199,9 @@ func (ws Whitespace) Write(w io.Writer, indent int) error {
 //	  background-image: url('./somewhere.png');
 //	}
 type CSSTemplate struct {
-	Name       Expression
-	Properties []CSSProperty
+	Name            Expression
+	Properties      []CSSProperty
+	MediaQueryRules map[string]MediaQueryRule
 }
 
 func (css CSSTemplate) IsTemplateFileNode() bool { return true }
@@ -213,7 +214,41 @@ func (css CSSTemplate) Write(w io.Writer, indent int) error {
 			return err
 		}
 	}
+	for _, m := range css.MediaQueryRules {
+		if err := m.Write(w, indent+1); err != nil {
+			return err
+		}
+	}
 	if err := writeIndent(w, indent, "}"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MediaQueryRule is a CSS media query rule that contains a list of CSS properties.
+//
+//	css topnav() {
+//		width: 50%;
+//		@media screen and (max-width: 600px) {
+//			float: none;
+//			width: 100%;
+//		}
+//	}
+type MediaQueryRule struct {
+	QueryExpression string
+	Properties      []CSSProperty
+}
+
+func (mq MediaQueryRule) Write(w io.Writer, indent int) error {
+	if err := writeIndent(w, indent, "@media "+mq.QueryExpression+" {\n"); err != nil {
+		return err
+	}
+	for _, p := range mq.Properties {
+		if err := p.Write(w, indent+1); err != nil {
+			return err
+		}
+	}
+	if err := writeIndent(w, indent, "}\n"); err != nil {
 		return err
 	}
 	return nil
@@ -238,6 +273,7 @@ func (c ConstantCSSProperty) Write(w io.Writer, indent int) error {
 	}
 	return nil
 }
+
 func (c ConstantCSSProperty) String(minified bool) string {
 	var sb strings.Builder
 	sb.WriteString(c.Name)

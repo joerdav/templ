@@ -9,10 +9,85 @@ import (
 
 // CSS.
 
+// CSS Property.
+var cssPropertyParser = parse.Func(func(pi *parse.Input) (cssProperty CSSProperty, ok bool, err error) {
+	// Try for an expression CSS declaration.
+	// background-color: { constants.BackgroundColor };
+	cssProperty, ok, err = expressionCSSPropertyParser.Parse(pi)
+	if err != nil {
+		return cssProperty, false, err
+	}
+	if ok {
+		return cssProperty, true, nil
+	}
+
+	// Try for a constant CSS declaration.
+	// color: #ffffff;
+	cssProperty, ok, err = constantCSSPropertyParser.Parse(pi)
+	if err != nil {
+		return cssProperty, false, err
+	}
+	if ok {
+		return cssProperty, true, nil
+	}
+	return cssProperty, false, nil
+})
+
+// CSS Media Query Start.
+var cssMediaQueryStartParser = parse.String("@media ")
+
+// CSS Media Query.
+var cssMediaQueryParser = parse.Func(func(pi *parse.Input) (r MediaQueryRule, ok bool, err error) {
+	start := pi.Index()
+	// Optional whitespace.
+	if _, ok, err = parse.OptionalWhitespace.Parse(pi); err != nil || !ok {
+		return
+	}
+
+	// Check the prefix first.
+	if _, ok, err = cssMediaQueryStartParser.Parse(pi); err != nil || !ok {
+		pi.Seek(start)
+		return
+	}
+
+	if r.QueryExpression, ok, err = Must(parse.StringUntil(parse.All(openBraceWithOptionalPadding, parse.NewLine)), "@media: unterminated (missing closing '{\\n')").Parse(pi); err != nil || !ok {
+		return
+	}
+	// Eat " {\n".
+	if _, ok, err = Must(parse.All(openBraceWithOptionalPadding, parse.NewLine), "@media: "+unterminatedMissingCurly).Parse(pi); err != nil || !ok {
+		return
+	}
+
+	for {
+		var cssProperty CSSProperty
+		cssProperty, ok, err = cssPropertyParser.Parse(pi)
+		if err != nil {
+			return
+		}
+		if ok {
+			r.Properties = append(r.Properties, cssProperty)
+			continue
+		}
+
+		// Eat any whitespace.
+		if _, ok, err = parse.OptionalWhitespace.Parse(pi); err != nil || !ok {
+			return
+		}
+
+		// Try for }
+		if _, ok, err = Must(closeBraceWithOptionalPadding, "@media: missing closing brace").Parse(pi); err != nil || !ok {
+			return
+		}
+
+		return r, true, nil
+	}
+})
+
 // CSS Parser.
 var cssParser = parse.Func(func(pi *parse.Input) (r CSSTemplate, ok bool, err error) {
 	r = CSSTemplate{
-		Properties: []CSSProperty{},
+		Properties:      []CSSProperty{},
+		MediaQueryRules: map[string]MediaQueryRule{},
 	}
 
 	// Parse the name.
@@ -24,10 +99,7 @@ var cssParser = parse.Func(func(pi *parse.Input) (r CSSTemplate, ok bool, err er
 
 	for {
 		var cssProperty CSSProperty
-
-		// Try for an expression CSS declaration.
-		// background-color: { constants.BackgroundColor };
-		cssProperty, ok, err = expressionCSSPropertyParser.Parse(pi)
+		cssProperty, ok, err = cssPropertyParser.Parse(pi)
 		if err != nil {
 			return
 		}
@@ -36,14 +108,14 @@ var cssParser = parse.Func(func(pi *parse.Input) (r CSSTemplate, ok bool, err er
 			continue
 		}
 
-		// Try for a constant CSS declaration.
-		// color: #ffffff;
-		cssProperty, ok, err = constantCSSPropertyParser.Parse(pi)
+		var mediaQuery MediaQueryRule
+		mediaQuery, ok, err = cssMediaQueryParser.Parse(pi)
 		if err != nil {
 			return
 		}
 		if ok {
-			r.Properties = append(r.Properties, cssProperty)
+			mediaQuery.Properties = append(r.MediaQueryRules[mediaQuery.QueryExpression].Properties, mediaQuery.Properties...)
+			r.MediaQueryRules[mediaQuery.QueryExpression] = mediaQuery
 			continue
 		}
 
@@ -126,25 +198,27 @@ var cssExpressionParser = parse.Func(func(pi *parse.Input) (r cssExpression, ok 
 })
 
 // CSS property name parser.
-var cssPropertyNameFirst = "abcdefghijklmnopqrstuvwxyz-"
-var cssPropertyNameSubsequent = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
-var cssPropertyNameParser = parse.Func(func(in *parse.Input) (name string, ok bool, err error) {
-	start := in.Position()
-	var prefix, suffix string
-	if prefix, ok, err = parse.RuneIn(cssPropertyNameFirst).Parse(in); err != nil || !ok {
-		return
-	}
-	if suffix, ok, err = parse.StringUntil(parse.RuneNotIn(cssPropertyNameSubsequent)).Parse(in); err != nil || !ok {
-		in.Seek(start.Index)
-		return
-	}
-	if len(suffix)+1 > 128 {
-		ok = false
-		err = parse.Error("css property names must be < 128 characters long", in.Position())
-		return
-	}
-	return prefix + suffix, true, nil
-})
+var (
+	cssPropertyNameFirst      = "abcdefghijklmnopqrstuvwxyz-"
+	cssPropertyNameSubsequent = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+	cssPropertyNameParser     = parse.Func(func(in *parse.Input) (name string, ok bool, err error) {
+		start := in.Position()
+		var prefix, suffix string
+		if prefix, ok, err = parse.RuneIn(cssPropertyNameFirst).Parse(in); err != nil || !ok {
+			return
+		}
+		if suffix, ok, err = parse.StringUntil(parse.RuneNotIn(cssPropertyNameSubsequent)).Parse(in); err != nil || !ok {
+			in.Seek(start.Index)
+			return
+		}
+		if len(suffix)+1 > 128 {
+			ok = false
+			err = parse.Error("css property names must be < 128 characters long", in.Position())
+			return
+		}
+		return prefix + suffix, true, nil
+	})
+)
 
 // background-color: {%= constants.BackgroundColor %};
 var expressionCSSPropertyParser = parse.Func(func(pi *parse.Input) (r ExpressionCSSProperty, ok bool, err error) {
