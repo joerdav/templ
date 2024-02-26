@@ -9,34 +9,39 @@ import (
 	"unicode"
 )
 
-var ErrContainerFuncNotFound = errors.New("parser error: templ container function not found")
-var ErrExpectedNodeNotFound = errors.New("parser error: expected node not found")
+var (
+	ErrContainerFuncNotFound = errors.New("parser error: templ container function not found")
+	ErrExpectedNodeNotFound  = errors.New("parser error: expected node not found")
+)
 
 func Case(content string) (start, end int, err error) {
 	if !(strings.HasPrefix(content, "case") || strings.HasPrefix(content, "default")) {
 		return 0, 0, ErrExpectedNodeNotFound
 	}
 	prefix := "switch {\n"
-	start, end, err = extract(prefix+content+"\n}", func(src string, body []ast.Stmt) (start, end int, err error) {
-		sw, ok := body[0].(*ast.SwitchStmt)
-		if !ok {
-			return 0, 0, ErrExpectedNodeNotFound
-		}
-		stmt, ok := sw.Body.List[0].(*ast.CaseClause)
-		if !ok {
-			return 0, 0, ErrExpectedNodeNotFound
-		}
-		if stmt.List == nil {
-			// Default case.
+	start, end, err = extract(
+		prefix+content+"\n}",
+		func(src string, body []ast.Stmt) (start, end int, err error) {
+			sw, ok := body[0].(*ast.SwitchStmt)
+			if !ok {
+				return 0, 0, ErrExpectedNodeNotFound
+			}
+			stmt, ok := sw.Body.List[0].(*ast.CaseClause)
+			if !ok {
+				return 0, 0, ErrExpectedNodeNotFound
+			}
+			if stmt.List == nil {
+				// Default case.
+				start = int(stmt.Case) - 1
+				end = int(stmt.Colon)
+				return start, end, nil
+			}
+			// Standard case.
 			start = int(stmt.Case) - 1
 			end = int(stmt.Colon)
 			return start, end, nil
-		}
-		// Standard case.
-		start = int(stmt.Case) - 1
-		end = int(stmt.Colon)
-		return start, end, nil
-	})
+		},
+	)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -102,15 +107,18 @@ func Switch(content string) (start, end int, err error) {
 }
 
 func Expression(content string) (start, end int, err error) {
-	start, end, err = extract(content, func(src string, body []ast.Stmt) (start, end int, err error) {
-		stmt, ok := body[0].(*ast.ExprStmt)
-		if !ok {
-			return 0, 0, ErrExpectedNodeNotFound
-		}
-		start = int(stmt.Pos()) - 1
-		end = int(stmt.End()) - 1
-		return start, end, nil
-	})
+	start, end, err = extractExpression(
+		content,
+		func(src string, body []ast.Stmt) (start, end int, err error) {
+			stmt, ok := body[0].(*ast.ExprStmt)
+			if !ok {
+				return 0, 0, ErrExpectedNodeNotFound
+			}
+			start = int(stmt.Pos()) - 1
+			end = int(stmt.End()) - 1
+			return start, end, nil
+		},
+	)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -131,16 +139,11 @@ func SliceArgs(content string) (expr string, err error) {
 	}
 
 	var from, to int
-	var stop bool
-	ast.Inspect(node, func(n ast.Node) bool {
-		if stop {
-			return false
-		}
+	inspectFirst(node, func(n ast.Node) bool {
 		decl, ok := n.(*ast.CompositeLit)
 		if !ok {
 			return true
 		}
-		stop = true
 		from = int(decl.Lbrace)
 		to = int(decl.Rbrace) - 1
 		for _, e := range decl.Elts {
@@ -176,7 +179,7 @@ func Func(content string) (name, expr string, err error) {
 		return name, expr, parseErr
 	}
 
-	ast.Inspect(node, func(n ast.Node) bool {
+	inspectFirst(node, func(n ast.Node) bool {
 		// Find the first function declaration.
 		fn, ok := n.(*ast.FuncDecl)
 		if !ok {
@@ -205,6 +208,20 @@ func latestEnd(start int, nodes ...ast.Node) (end int) {
 	return end
 }
 
+func inspectFirst(node ast.Node, f func(ast.Node) bool) {
+	var stop bool
+	ast.Inspect(node, func(n ast.Node) bool {
+		if stop {
+			return false
+		}
+		if f(n) {
+			return true
+		}
+		stop = true
+		return false
+	})
+}
+
 // Extract a Go expression from the content.
 // The Go expression starts at "start" and ends at "end".
 // The reader should skip until "length" to pass over the expression and into the next
@@ -212,6 +229,36 @@ func latestEnd(start int, nodes ...ast.Node) (end int) {
 type Extractor func(src string, body []ast.Stmt) (start, end int, err error)
 
 func extract(content string, extractor Extractor) (start, end int, err error) {
+	prefix := "package main\nfunc templ_container() {\n"
+	src := prefix + content
+
+	node, parseErr := parser.ParseFile(token.NewFileSet(), "", src, parser.AllErrors)
+	if node == nil {
+		return 0, 0, parseErr
+	}
+
+	inspectFirst(node, func(n ast.Node) bool {
+		// Find the "templ_container" function.
+		fn, ok := n.(*ast.FuncDecl)
+		if !ok {
+			return true
+		}
+		if fn.Name.Name != "templ_container" {
+			err = ErrContainerFuncNotFound
+			return false
+		}
+		if fn.Body.List == nil || len(fn.Body.List) == 0 {
+			return false
+		}
+		start, end, err = extractor(src, fn.Body.List)
+		start -= len(prefix)
+		end -= len(prefix)
+		return false
+	})
+	return start, end, err
+}
+
+func extractExpression(content string, extractor Extractor) (start, end int, err error) {
 	prefix := "package main\nfunc templ_container() {\n"
 	src := prefix + content
 

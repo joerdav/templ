@@ -42,6 +42,7 @@ func TestFor(t *testing.T) {
 	prefix := "for "
 	suffixes := []string{
 		" {\n<div>\nloop content\n\t</div>}",
+		" {\n<div>\nloop content\n\t</div>}\nfor true {\n<div>\nother\n\t</div>}",
 	}
 	tests := []testInput{
 		{
@@ -262,6 +263,41 @@ func TestSliceArgs(t *testing.T) {
 					t.Errorf("failed to parse slice args: %v", err)
 				}
 				if diff := cmp.Diff(test.input, expr); diff != "" {
+					t.Error(diff)
+				}
+			})
+		}
+	}
+}
+
+func TestFunc(t *testing.T) {
+	suffixes := []string{
+		"{",
+		"{}",
+		"{}\nvar x = []struct {}{}",
+		"{}\nfunc second() {}",
+	}
+	tests := []testInput{
+		{
+			name:  "void function",
+			input: `myfunc()`,
+		},
+		{
+			name:  "receiver function",
+			input: `(rcv r) myfunc()`,
+		},
+	}
+	for _, test := range tests {
+		for i, suffix := range suffixes {
+			t.Run(fmt.Sprintf("%s_%d", test.name, i), func(t *testing.T) {
+				name, expr, err := Func("func " + test.input + suffix)
+				if err != nil {
+					t.Errorf("failed to parse slice args: %v", err)
+				}
+				if diff := cmp.Diff(test.input, expr); diff != "" {
+					t.Error(diff)
+				}
+				if diff := cmp.Diff("myfunc", name); diff != "" {
 					t.Error(diff)
 				}
 			})
