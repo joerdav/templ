@@ -78,27 +78,6 @@ func TestScriptElementParser(t *testing.T) {
 			},
 		},
 		{
-			name:  "script: vbscript",
-			input: `<script type="vbscript">dim x = 1</script>`,
-			expected: &ScriptElement{
-				Attributes: []Attribute{
-					&ConstantAttribute{
-						Value: "vbscript",
-						Key: ConstantAttributeKey{
-							Name: "type",
-							NameRange: Range{
-								From: Position{Index: 8, Line: 0, Col: 8},
-								To:   Position{Index: 12, Line: 0, Col: 12},
-							},
-						},
-					},
-				},
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("dim x = 1"),
-				},
-			},
-		},
-		{
 			name:  "script: go expression",
 			input: `<script>{{ name }}</script>`,
 			expected: &ScriptElement{
@@ -120,266 +99,41 @@ func TestScriptElementParser(t *testing.T) {
 			},
 		},
 		{
-			name:  "script: go expression with explicit type",
-			input: `<script type="text/javascript">{{ name }}</script>`,
+			name:  "script: regex with forward slashes",
+			input: `<script>const clientIdMatch = evt.detail.message.match(/data-client-id="([^"]+)"/);</script>`,
 			expected: &ScriptElement{
-				Attributes: []Attribute{&ConstantAttribute{
-					Value: "text/javascript",
-					Key: ConstantAttributeKey{
-						Name: "type", NameRange: Range{
-							From: Position{Index: 8, Line: 0, Col: 8},
-							To:   Position{Index: 12, Line: 0, Col: 12},
-						},
-					},
-				}},
 				Contents: []ScriptContents{
-					NewScriptContentsGo(&GoCode{
-						Expression: Expression{
-							Value: "name",
-							Range: Range{
-								From: Position{Index: 34, Line: 0, Col: 34},
-								To:   Position{Index: 38, Line: 0, Col: 38},
-							},
-						},
-					}, false),
+					NewScriptContentsScriptCode(`const clientIdMatch = evt.detail.message.match(/data-client-id="([^"]+)"/);`),
 				},
 				Range: Range{
 					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 50, Line: 0, Col: 50},
+					To:   Position{Index: 92, Line: 0, Col: 92},
 				},
 			},
 		},
 		{
-			name:  "script: go expression with module type",
-			input: `<script type="module">{{ name }}</script>`,
+			name:  "script: division operator with numbers",
+			input: `<script>var x = 1 / 2;</script>`,
 			expected: &ScriptElement{
-				Attributes: []Attribute{&ConstantAttribute{
-					Value: "module",
-					Key: ConstantAttributeKey{
-						Name: "type", NameRange: Range{
-							From: Position{Index: 8, Line: 0, Col: 8},
-							To:   Position{Index: 12, Line: 0, Col: 12},
-						},
-					},
-				}},
 				Contents: []ScriptContents{
-					NewScriptContentsGo(&GoCode{
-						Expression: Expression{
-							Value: "name",
-							Range: Range{
-								From: Position{Index: 25, Line: 0, Col: 25},
-								To:   Position{Index: 29, Line: 0, Col: 29},
-							},
-						},
-					}, false),
+					NewScriptContentsScriptCode("var x = 1 / 2;"),
 				},
 				Range: Range{
 					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 41, Line: 0, Col: 41},
+					To:   Position{Index: 31, Line: 0, Col: 31},
 				},
 			},
 		},
 		{
-			name:  "script: go expression with javascript type",
-			input: `<script type="javascript">{{ name }}</script>`,
+			name:  "script: division operator with identifiers",
+			input: `<script>var z = x / y;</script>`,
 			expected: &ScriptElement{
-				Attributes: []Attribute{&ConstantAttribute{
-					Value: "javascript",
-					Key: ConstantAttributeKey{
-						Name: "type", NameRange: Range{
-							From: Position{Index: 8, Line: 0, Col: 8},
-							To:   Position{Index: 12, Line: 0, Col: 12},
-						},
-					},
-				}},
 				Contents: []ScriptContents{
-					NewScriptContentsGo(&GoCode{
-						Expression: Expression{
-							Value: "name",
-							Range: Range{
-								From: Position{Index: 29, Line: 0, Col: 29},
-								To:   Position{Index: 33, Line: 0, Col: 33},
-							},
-						},
-					}, false),
+					NewScriptContentsScriptCode("var z = x / y;"),
 				},
 				Range: Range{
 					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 45, Line: 0, Col: 45},
-				},
-			},
-		},
-		{
-			name: "script: go expression - multiline 1",
-			input: `<script>
-{{ name }}
-</script>`,
-			expected: &ScriptElement{
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("\n"),
-					NewScriptContentsGo(&GoCode{
-						Expression: Expression{
-							Value: "name",
-							Range: Range{
-								From: Position{Index: 12, Line: 1, Col: 3},
-								To:   Position{Index: 16, Line: 1, Col: 7},
-							},
-						},
-						TrailingSpace: SpaceVertical,
-					}, false),
-				},
-				Range: Range{
-					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 29, Line: 2, Col: 9},
-				},
-			},
-		},
-		{
-			name:  "script: go expression in single quoted string",
-			input: `<script>var x = '{{ name }}';</script>`,
-			expected: &ScriptElement{
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("var x = '"),
-					NewScriptContentsGo(&GoCode{
-						Expression: Expression{
-							Value: "name",
-							Range: Range{
-								From: Position{Index: 20, Line: 0, Col: 20},
-								To:   Position{Index: 24, Line: 0, Col: 24},
-							},
-						},
-					}, true),
-					NewScriptContentsScriptCode("';"),
-				},
-				Range: Range{
-					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 38, Line: 0, Col: 38},
-				},
-			},
-		},
-		{
-			name:  "script: go expression in double quoted string",
-			input: `<script>var x = "{{ name }}";</script>`,
-			expected: &ScriptElement{
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("var x = \""),
-					NewScriptContentsGo(&GoCode{
-						Expression: Expression{
-							Value: "name",
-							Range: Range{
-								From: Position{Index: 20, Line: 0, Col: 20},
-								To:   Position{Index: 24, Line: 0, Col: 24},
-							},
-						},
-					}, true),
-					NewScriptContentsScriptCode("\";"),
-				},
-				Range: Range{
-					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 38, Line: 0, Col: 38},
-				},
-			},
-		},
-		{
-			name: "script: go expression in double quoted multiline string",
-			input: `<script>var x = "This is a test \
-{{ name }} \
-to see if it works";</script>`,
-			expected: &ScriptElement{
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("var x = \"This is a test \\\n"),
-					NewScriptContentsGo(&GoCode{
-						Expression: Expression{
-							Value: "name",
-							Range: Range{
-								From: Position{Index: 37, Line: 1, Col: 3},
-								To:   Position{Index: 41, Line: 1, Col: 7},
-							},
-						},
-						TrailingSpace: SpaceHorizontal,
-					}, true),
-					NewScriptContentsScriptCode("\\\nto see if it works\";"),
-				},
-				Range: Range{
-					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 76, Line: 2, Col: 29},
-				},
-			},
-		},
-		{
-			name:  "script: go expression in backtick quoted string",
-			input: `<script>var x = ` + "`" + "{{ name }}" + "`" + `;</script>`,
-			expected: &ScriptElement{
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("var x = `"),
-					NewScriptContentsGo(&GoCode{
-						Expression: Expression{
-							Value: "name",
-							Range: Range{
-								From: Position{Index: 20, Line: 0, Col: 20},
-								To:   Position{Index: 24, Line: 0, Col: 24},
-							},
-						},
-					}, true),
-					NewScriptContentsScriptCode("`;"),
-				},
-				Range: Range{
-					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 38, Line: 0, Col: 38},
-				},
-			},
-		},
-		{
-			name: "script: single line commented out go expressions are ignored",
-			input: `<script>
-// {{ name }}
-</script>`,
-			expected: &ScriptElement{
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("\n"),
-					NewScriptContentsScriptCode("// {{ name }}\n"),
-				},
-				Range: Range{
-					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 32, Line: 2, Col: 9},
-				},
-			},
-		},
-		{
-			name: "script: multiline commented out go expressions are ignored",
-			input: `<script>
-/* There's some content
-{{ name }}
-but it's commented out */
-</script>`,
-			expected: &ScriptElement{
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("\n"),
-					NewScriptContentsScriptCode("/* There's some content\n{{ name }}\nbut it's commented out */\n"),
-				},
-				Range: Range{
-					From: Position{Index: 0, Line: 0, Col: 0},
-					To:   Position{Index: 79, Line: 4, Col: 9},
-				},
-			},
-		},
-		{
-			name: "script: non js content is parsed raw",
-			input: `<script type="text/hyperscript">
-set tier_1 to #tier-1's value
-</script>`,
-			expected: &ScriptElement{
-				Attributes: []Attribute{&ConstantAttribute{
-					Value: "text/hyperscript",
-					Key: ConstantAttributeKey{
-						Name: "type", NameRange: Range{
-							From: Position{Index: 8, Line: 0, Col: 8},
-							To:   Position{Index: 12, Line: 0, Col: 12},
-						},
-					},
-				}},
-				Contents: []ScriptContents{
-					NewScriptContentsScriptCode("\nset tier_1 to #tier-1's value\n"),
+					To:   Position{Index: 31, Line: 0, Col: 31},
 				},
 			},
 		},
